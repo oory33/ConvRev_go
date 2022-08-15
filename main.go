@@ -2,15 +2,17 @@ package main
 
 import (
 	"log"
+	"math"
 	"os"
 
 	"github.com/oory33/ConvRev_go/c2s"
-
-	"github.com/mjibson/go-dsp/fft"
 	"github.com/youpy/go-wav"
+	"gonum.org/v1/gonum/dsp/window"
 )
 
 func main() {
+	overlap := 1024
+
 	var datareader *wav.Reader
 	var irreader *wav.Reader
 
@@ -29,19 +31,38 @@ func main() {
 		datareader = wav.NewReader(data)
 	}
 
-	samples, _ := irreader.ReadSamples()
-	irsample := make([]complex128, 0, len(samples))
-	for _, sample := range samples {
-		irsample = append(irsample, complex(irreader.FloatValue(sample, 0), 0))
+	irl, _ := irreader.Datasize()
+	datal, _ := datareader.Datasize()
+	longer := math.Max(float64(irl), float64(datal))
+	shorter := math.Min(float64(irl), float64(datal))
+
+	if longer == float64(irl) {
+		log.Fatal()
+	} //IRの長さがデータの長さより長い場合は暫定的にエラー
+
+	samples, _ := irreader.ReadSamples(uint32(shorter))
+	irsample := make([]complex128, uint(shorter))
+	for i, sample := range samples {
+		irsample[i] = complex(float64(irreader.IntValue(sample, 0)), 0)
 	}
 
-	samples, _ = datareader.ReadSamples()
-	datasample := make([]complex128, 0, len(samples))
-	for _, sample := range samples {
-		datasample = append(datasample, complex(datareader.FloatValue(sample, 0), 0))
+	samples, _ = datareader.ReadSamples(uint32(longer))
+	datasample := make([]complex128, uint(longer))
+	for i, sample := range samples {
+		datasample[i] = complex(float64(datareader.IntValue(sample, 0)), 0)
 	}
 
-	outcmplx := fft.Convolve(irsample, datasample)
+	outcmplx := make([]complex128, uint32(longer))
+	outcmplx2 := make([]complex128, uint32(longer))
+
+	for i := 0; i < int(longer)-int(shorter); i += int(shorter) * int(overlap) {
+		windowedir := window.HammingComplex(irsample[i:int(shorter)])
+		windoweddata := window.HammingComplex(datasample[i:int(shorter)])
+
+		outcmplx = windoweddata + windowedir
+
+	}
+
 	output := c2s.Cplx2spl(outcmplx)
 
 	outfile, _ := os.Create("./output/out.wav")
@@ -50,6 +71,6 @@ func main() {
 	srate, _ := irreader.Samprate()
 	bit, _ := irreader.BitsPerSample()
 
-	writer := wav.NewWriter(outfile, uint32(len(output)), 2, srate, bit)
+	writer := wav.NewWriter(outfile, uint32(longer), 2, srate, bit)
 	writer.WriteSamples(output)
 }

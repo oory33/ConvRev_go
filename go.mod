@@ -3,8 +3,8 @@ module github.com/oory33/ConvRev_go
 go 1.19
 
 require (
-	github.com/mjibson/go-dsp v0.0.0-20180508042940-11479a337f12
 	github.com/youpy/go-wav v0.3.2
+	gonum.org/v1/gonum v0.11.0
 )
 
 require (
