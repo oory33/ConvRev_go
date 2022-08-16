@@ -5,18 +5,20 @@ import (
 	"math"
 	"os"
 
-	"github.com/oory33/ConvRev_go/c2s"
+	"github.com/mjibson/go-dsp/fft"
+	cmplxs "github.com/oory33/ConvRev_go/c2s"
+	flts "github.com/oory33/ConvRev_go/f2s"
+
 	"github.com/youpy/go-wav"
-	"gonum.org/v1/gonum/dsp/window"
 )
 
 func main() {
-	overlap := 1024
+	overlap := 0.1
 
 	var datareader *wav.Reader
 	var irreader *wav.Reader
 
-	ir, err1 := os.Open("./input/ir_1.wav")
+	ir, err1 := os.Open("./input/ir.wav")
 	if err1 != nil {
 		log.Fatal(err1)
 	} else {
@@ -33,43 +35,43 @@ func main() {
 
 	irl, _ := irreader.Datasize()
 	datal, _ := datareader.Datasize()
+	srate, _ := irreader.Samprate()
+	bit, _ := irreader.BitsPerSample()
 	longer := math.Max(float64(irl), float64(datal))
 	shorter := math.Min(float64(irl), float64(datal))
 
 	if longer == float64(irl) {
-		log.Fatal()
+		panic("IR data is longer")
 	} //IRの長さがデータの長さより長い場合は暫定的にエラー
 
 	samples, _ := irreader.ReadSamples(uint32(shorter))
-	irsample := make([]complex128, uint(shorter))
+	irsample := make([]float64, uint(shorter))
 	for i, sample := range samples {
-		irsample[i] = complex(float64(irreader.IntValue(sample, 0)), 0)
+		irsample[i] = float64(irreader.IntValue(sample, 0))
 	}
 
 	samples, _ = datareader.ReadSamples(uint32(longer))
-	datasample := make([]complex128, uint(longer))
+	datasample := make([]float64, uint(longer))
 	for i, sample := range samples {
-		datasample[i] = complex(float64(datareader.IntValue(sample, 0)), 0)
+		datasample[i] = float64(datareader.IntValue(sample, 0))
 	}
 
-	outcmplx := make([]complex128, uint32(longer))
-	outcmplx2 := make([]complex128, uint32(longer))
+	ircmplx := flts.Cmplx(irsample)
+	out := make([]complex128, int(longer))
 
-	for i := 0; i < int(longer)-int(shorter); i += int(shorter) * int(overlap) {
-		windowedir := window.HammingComplex(irsample[i:int(shorter)])
-		windoweddata := window.HammingComplex(datasample[i:int(shorter)])
+	for i := 0; i < int(longer-shorter); i += int(shorter * overlap) {
+		datacmplx := flts.Cmplx(datasample[i : i+int(shorter)])
+		out2 := fft.Convolve(ircmplx, datacmplx)
 
-		outcmplx = windoweddata + windowedir
-
+		out2 = append(make([]complex128, i), out2...)
+		out2 = append(out2, make([]complex128, int(longer)-i-int(shorter))...)
+		out = cmplxs.Add(out, out2)
 	}
 
-	output := c2s.Cplx2spl(outcmplx)
+	output := cmplxs.Spl(out, bit+3)
 
 	outfile, _ := os.Create("./output/out.wav")
 	defer outfile.Close()
-
-	srate, _ := irreader.Samprate()
-	bit, _ := irreader.BitsPerSample()
 
 	writer := wav.NewWriter(outfile, uint32(longer), 2, srate, bit)
 	writer.WriteSamples(output)
