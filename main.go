@@ -68,7 +68,7 @@ func main() {
 		out = cmplxs.Add(out, out2)
 	}
 
-	output := cmplxs.Spl(out, bit+3)
+	output := cmplxs.Spl(out, bit+6)
 
 	outfile, _ := os.Create("./output/out.wav")
 	defer outfile.Close()
